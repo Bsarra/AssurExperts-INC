@@ -1,0 +1,537 @@
+---
+title: "Lab2"
+author: "Delta"
+date: "31/10/2018"
+output: html_document
+---
+# Introduction
+La compagnie d'assurance Canadienne AssurancExpertsInc cherche comme tous ses concurrents ? cibler les meilleurs profils de clients pour les diffèrentes cat?gories d'assurances pour ses strat?gies de Marketing.
+C'est dans ce cadre que s'inscrit notre ?tude sur l'analyse des donn?es relatives aux clients de la comagnie afin de voir les meilleurs profils de client ? cibler lors des compagnes marketing pour une police d'assurance sur caravane.
+# Compr?hension m?tier
+##Probl?matique:
+Les compagnes publicitaires par e-mails, bien qu'elle soient efficaces avec les clients int?ress?s, peut cr?er un d?sagr?ment chez les clients non int?r?ss?s. Cette strat?gie devient dans ce cas contre-productive et peut nuire ? l'assurance en terme de client?le et de gaspillage des ressources.
+## Objectifs:
+-Cibler les clients pour une compagne marketing.
+-Cibler l'envoi des mails personnalis?s.
+-Pousser les profils rep?r?s ? demander l'assurance caravane.
+## Data Science goals:
+-Soustraire les profils des clients potentiellement int?ress?s par une assurance caravane.
+-Etablir une connaissance ? priori sur les futurs clients.
+# Compr?hension des donn?es
+##Chargement des libraries
+```{r message=FALSE, warning=FALSE}
+library(DMwR)
+library(adabag)
+library(ggplot2)
+library(corrplot)
+library(readxl)
+library(caret)
+library(resample)
+library(randomForest)
+library(mlbench)
+library(rpart.plot)
+library(rpart)
+library(smotefamily)
+library(ROCR)
+library(car)
+library(MASS)
+library(tfestimators)
+library(RODBC)
+library(plotly)
+library(e1071)
+```
+##mportation du dataset "AssurancExpertsINC"
+
+```{r message=FALSE, warning=FALSE}
+dataAssurance <- read.table(file.choose(),sep = "\t",dec=".",na.strings = "",header = T)
+data_assurance<-dataAssurance
+```
+Visualisation de notre dataset
+```{r message=FALSE, warning=FALSE}
+dim(dataAssurance)
+head(dataAssurance,n = 5)
+summary(dataAssurance)
+str(dataAssurance)
+```
+Visualisation des corr?lations entre les variables sociod?mographiques
+```{r message=FALSE, warning=FALSE}
+dd <- dataAssurance[,1:43]
+cc <- cor(dd)
+corrplot(t(cc), method="ellipse")
+```
+Visualisation des corr?lations entre les variables propri?taires de produits
+```{r message=FALSE, warning=FALSE}
+dd <- dataAssurance[,44:85]
+cc <- cor(dd)
+corrplot(t(cc), method="ellipse")
+```
+Le nombre de clients qui d?sirent ou non avoir une assurance sur caravane 
+
+
+
+
+
+
+```{r message=FALSE, warning=FALSE}
+summary(dataAssurance$CLASS)
+plot(dataAssurance$CLASS)
+```
+On remarque que le nombre des clients qui souhaitent de leur plein gr? avoir une assurance caravane est tr?s inferieur ? celui des clients qui ne souhaitent pas 
+avoir ce type d'assurance.
+
+```{r message=FALSE, warning=FALSE}
+boxplot(x = dataAssurance)
+```
+
+#Les attributs sociodemographiques :
+
+```{r message=FALSE, warning=FALSE}
+ggplot(data=dataAssurance, aes(dataAssurance$SD1)) + 
+  geom_histogram(breaks=seq(1, 41, by=1), aes(fill=..count..)) +
+  scale_fill_gradient("Count", low="green", high="red") +
+  ggtitle("Histrogram of Type") + 
+  labs(x="Class", y="Count")
+
+```
+
+Lower class large families domine notre ?chantillon
+
+```{r message=FALSE, warning=FALSE}
+a <- dataAssurance[which(dataAssurance$SD1==33),]
+df <- data.frame(
+  group = a$CLASS,
+  value = a$SD1
+  )
+
+ggplot(df, aes(x=factor(1), fill=group))+
+  geom_bar(width = 1)+
+  coord_polar("y")
+
+```
+Majoritairement , les individues de type "Lower class large" ont r?pondu non ? l'assurance caravane.
+
+Subdiviser le  dataset pour r?cuperer les individus qui ont r?pondu OUI
+```{r message=FALSE, warning=FALSE}
+y <- dataAssurance[which(dataAssurance$CLASS=="Yes"),]
+head(y,n=50)
+```
+
+```{r message=FALSE, warning=FALSE}
+ggplot(data=y, aes(y$SD4)) + 
+  geom_histogram(breaks=seq(0, 6, by=1), aes(fill=..count..)) +
+  scale_fill_gradient("Count", low="green", high="red") +
+  ggtitle("Histrogram of Type") + 
+  labs(x="Age", y="Count")
+```
+```{r}
+ncountType=table(dataAssurance$SD4)
+ncountType=data.frame(ncountType)
+DemoYesType <- data.frame(
+  group = ncountType$Var1 ,
+  value = ncountType$Freq
+)
+library(plotly)
+YesType <- DemoYesType[,c("group", "value")]
+colors <- c('rgb(215,94,96)', 'rgb(122,132,133)', 'rgb(145,253,429)', 'rgb(175,105,877)', 'rgb(115,147,23)')
+
+p <- plot_ly(DemoYesType, labels = ~group, values = ~value, type = 'pie', marker = list(colors = colors,
+                      line = list(color = '#FFFFFF', width = 1))) %>%
+  layout(title = 'Customer Age range')
+p
+```
+
+Parmi les individus qui ont r?pondu OUI, la majorit? ont entre 40 et 50 ans.
+
+```{r message=FALSE, warning=FALSE}
+ggplot(data=y, aes(y$SD1)) + 
+  geom_histogram(breaks=seq(0, 41, by=1), aes(fill=..count..)) +
+  scale_fill_gradient("Count", low="green", high="red") +
+  ggtitle("Histrogram of Type") + 
+  labs(x="SubType", y="Count")
+```
+
+```{r message=FALSE, warning=FALSE}
+ggplot(data=y, aes(y$SD1)) + 
+  geom_histogram(breaks=seq(0, 41, by=1), aes(fill=..count..)) +
+  scale_fill_gradient("Count", low="lightblue", high="blue") +
+  ggtitle("Histrogram of SubType") + 
+  labs(x="SubType", y="Count")
+```
+```{r message=FALSE, warning=FALSE}
+{
+  d1=dataAssurance[,c(1,86)]
+  f=data.frame()
+  for(i in seq(1,41,1))
+  {
+    f[i,"Freq"]=nrow(d1[which((d1$SD1==i) & (d1$CLASS=="Yes")),])
+  }
+  f
+  f[,"Label"]=c("High Income, expensive child"
+                ,"Very Important Provincials"
+                ,"High status seniors"
+                ,"Affluent senior apartments"
+                ,"Mixed seniors"
+                ,"Career and childcare"
+                ,"Dinki's (double income no kids)"
+                ,"Middle class families"
+                ,"Modern, complete families"
+                ,"Stable family"
+                ,"Family starters"
+                ,"Affluent young families"
+                ,"Young all american family"
+                ,"Junior cosmopolitan"
+                ,"Senior cosmopolitans"
+                ,"Students in apartments"
+                ,"Fresh masters in the city"
+                ,"Single youth"
+                ,"Suburban youth"
+                ,"Etnically diverse"
+                ,"Young urban have-nots"
+                ,"Mixed apartment dwellers"
+                ,"Young and rising"
+                ,"Young, low educated" 
+                ,"Young seniors in the city"
+                ,"Own home elderly"
+                ,"Seniors in apartments"
+                ,"Residential elderly"
+                ,"Porchless seniors: no front yard"
+                ,"Religious elderly singles"
+                ,"Low income catholics"
+                ,"Mixed seniors"
+                ,"Lower class large families"
+                ,"Large family, employed child"
+                ,"Village families"
+                ,"Couples with teens 'Married with children'"
+                ,"Mixed small town dwellers"
+                ,"Traditional families"
+                ,"Large religous families"
+                ,"Large family farms"
+                ,"Mixed rurals")
+  p <- plot_ly(f, labels=f$Label ,values = f$Freq, type = 'pie',textinfo = 'label+percent') %>%
+    layout(title = 'Pie Chart MOSTYPE Customer Subtype Class YES',
+           xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+           yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+  
+  p
+}
+```
+
+Parmi les individus qui ont r?pondu OUI, la majorit? sont de type "Lower class large" et "Middle class families"
+
+```{r message=FALSE, warning=FALSE}
+ggplot(data=y, aes(y$SD5)) + 
+  geom_histogram(breaks=seq(0, 11, by=1), aes(fill=..count..)) +
+  scale_fill_gradient("Count", low="lightblue", high="blue") +
+  ggtitle("Histrogram of MainType") + 
+  labs(x="MainType", y="Count")
+
+```
+
+Parmi les individus qui ont r?pondu OUI, la majorit? sont de type "Family with gronw ups".
+On remarque aussi les individus de type "driven growers" et "average family".
+
+```{r message=FALSE, warning=FALSE}
+ggplot(data=y, aes(y$SD6)) + 
+  geom_histogram(breaks=seq(0, 11, by=1), aes(fill=..count..)) +
+  scale_fill_gradient("Count", low="lightblue", high="blue") +
+  ggtitle("Histrogram of Roman Catholics") + 
+  labs(x="% Roman Catholic", y="Count")
+```
+
+à peu près 470 personnes catégorisés comme 0-10% Roman Catholic ont répondu oui à l'assurance caravane.
+
+#Les attributs propriétaire de produit:
+
+```{r message=FALSE, warning=FALSE}
+ggplot(data=y, aes(y$PO44)) + 
+  geom_histogram(breaks=seq(0, 11, by=1), aes(fill=..count..)) +
+  scale_fill_gradient("Count", low="yellow", high="red") +
+  ggtitle("Histrogram of Contribution private third party insurance") + 
+  labs(x="Contribution private third party insurance", y="Count")
+```
+
+```{r}
+ncountType=table(y$PO44)
+ncountType=data.frame(ncountType)
+DemoYesType <- data.frame(
+  group = ncountType$Var1 ,
+  value = ncountType$Freq
+)
+library(plotly)
+YesType <- DemoYesType[,c("group", "value")]
+colors <- c('rgb(215,94,96)', 'rgb(122,132,133)', 'rgb(145,253,429)', 'rgb(175,105,877)', 'rgb(115,147,23)')
+
+p <- plot_ly(DemoYesType, labels = ~group, values = ~value, type = 'pie', marker = list(colors = colors,
+                      line = list(color = '#FFFFFF', width = 1))) %>%
+  layout(title = 'Histrogram of Contribution private third party insurance')
+p
+```
+Les individus qui dépensent entre 1 et 99 dollars ont répondu OUI à l'assurance caravane.
+```{r message=FALSE, warning=FALSE}
+p <- plot_ly(alpha = 0.6) %>%
+    add_histogram(x = ~dataAssurance[which((dataAssurance$CLASS=="No")),"PO47"],histnorm="percent",name="NON") %>%
+    add_histogram(x = ~dataAssurance[which((dataAssurance$CLASS=="Yes")),"PO47"],histnorm="percent",name="OUI") %>%
+    layout(barmode = "overlay")%>%
+    layout(title ="Contribution car policies")
+  p
+```
+
+50% de ceux qui ont répondu "non" à l’offre n’ont même pas d’assurance voiture alors que 71% de ceux qui ont répondu "oui" dépensent entre 1000 et 4999.
+
+```{r message=FALSE, warning=FALSE}
+p <- plot_ly(alpha = 0.6) %>%
+    add_histogram(x = ~dataAssurance[which((dataAssurance$CLASS=="No")),"PO59"],histnorm="percent",name="NON") %>%
+    add_histogram(x = ~dataAssurance[which((dataAssurance$CLASS=="Yes")),"PO59"],histnorm="percent",name="OUI") %>%
+    layout(barmode = "overlay")%>%
+    layout(title ="Contribution fire policies")
+  p
+```
+
+46% de ceux qui qui ont répondu "non" à l’offre n’ont  pas d’assurance incendie contre 30.88% de ceux  qui ont répondu "oui" à l’offre. 51% de ceux qui ont répondu "oui" à l’offre dépensent entre 100 et 499.
+
+#Modelisation
+##Division du DataSet:
+
+```{r message=FALSE, warning=FALSE}
+data.train<-dataAssurance[which(dataAssurance$STATUS=="Learning"),1:86]
+data_assurance_apprentissage <-data.train
+data.test<-dataAssurance[which(dataAssurance$STATUS=="Test"),1:86]
+data_assurance_test<-data.test
+```
+##Modeles de classification
+###Modele Random Forest
+```{r}
+a=c()
+i=1
+
+for (i in 1:20) {
+  model1 <- randomForest(data_assurance_apprentissage$CLASS ~ ., data = data_assurance_apprentissage, ntree = 500, mtry = i, importance = TRUE)
+  predValid <- predict(model1, data_assurance_test, type = "class")
+  a[i] = mean(predValid == data_assurance_test$CLASS)
+}
+
+a
+
+plot(1:20,a)
+
+importance(model1)
+varImpPlot(model1)
+
+model2 <- randomForest(data_assurance_apprentissage$CLASS ~ ., data = data_assurance_apprentissage, ntree = 500,mtry = 3, importance = TRUE)
+
+predValid <- predict(model2, data_assurance_test, type = "class")
+
+mean(predValid == data_assurance_test$CLASS)
+table(predictions=predValid,actual=data_assurance_test$CLASS)
+
+```
+
+###Modele Random Forest avec cross validation:
+
+```{r message=FALSE, warning=FALSE}
+data.train$CLASS <- as.factor(data.train$CLASS)
+data.test$CLASS <- as.factor(data.test$CLASS)
+set.seed(123)
+
+grid <- expand.grid(mtry=c(2,3,4))
+
+
+modelKF <- caret::train(CLASS ~.,
+                 data=data.train,
+                 method= "rf",
+                 trControl= trainControl(method = "cv", number = 3, savePredictions = TRUE),
+                 tuneGrid=grid,
+                 preProcess=c('center','scale'))
+predictionsKF<-predict(modelKF,data.test,type = "prob")
+
+```
+
+```{r message=FALSE, warning=FALSE}
+pred <- as.data.frame(predictionsKF)
+pred1 <- prediction(pred[,2],data.test$CLASS)
+perfrfp=performance(pred1,"tpr", "fpr")
+plot(perfrfp,colorize = TRUE)
+
+perf <- performance(pred1, "auc")
+perf@y.values[[1]]
+```
+
+#Model Random Forest avec Bootstrap:
+
+```{r}
+train_control_bootstrap <- trainControl(method="boot", number=10)
+# train the model
+modelBoot <- caret::train(CLASS~., data=data_assurance_apprentissage, trControl=train_control_bootstrap, method="rf")
+
+predValid_boot <- predict(modelBoot, data_assurance_test, type = "raw")
+
+table(predictions=predValid_boot,actual=data_assurance_test$CLASS)
+# summarize results
+print(modelBoot)
+```
+
+###Modele Adaboost
+
+```{r message=FALSE, warning=FALSE}
+adaboost<-boosting(CLASS ~ .,data = data.train, boos=TRUE, mfinal=20,coeflearn='Breiman')
+summary(adaboost)
+
+errorevol(adaboost,data.train)
+predValid_adab<-predict(adaboost,data.test)
+
+mean(predValid_adab$class == data.test$CLASS)
+table(predictions=predValid_adab$class,actual=data.test$CLASS)
+
+t1<-adaboost$trees[[1]]
+
+rpart.plot(t1, box.palette="RdBu", shadow.col="gray", nn=TRUE,roundint=FALSE)
+```
+
+###Decision Tree avec SMOTE:
+
+```{r message=FALSE, warning=FALSE}
+library(DMwR)
+classTree <- DMwR::SMOTE(CLASS~.,data.train,k = 5,perc.over = 600,perc.under = 100,learner = "rpart")
+tree.prediction<- predict(classTree,data.test, type="class")
+prp(classTree)
+rpart.plot(classTree, box.palette="RdBu", shadow.col="gray", nn=TRUE,roundint=FALSE)
+```
+
+
+
+### Modele LDA (Linear discriminant analysis):
+
+```{r message=FALSE, warning=FALSE}
+n=85
+nt=60
+neval=n-nt
+rep=100
+
+### LDA
+set.seed(123456789)
+errlin=dim(rep)
+for (k in 1:rep) {
+## linear discriminant analysis
+m1=lda(CLASS~.,data.train)
+v <- predict(m1,data.test)
+tablin=table(data.test$CLASS,v$class)
+errlin[k]=(neval-sum(diag(tablin)))/neval
+}
+merrlin=mean(errlin)
+merrlin
+```
+## Modele SVM
+```{r}
+library(e1071) 
+modelsvm<-svm(CLASS~., data=data.train, method= "C-classification" , kernel="radial" ,cost=10,gamma=0.1,cross=0,fitted=TRUE, probability=TRUE)
+modelsvm
+
+```
+
+
+##Courbes ROC
+
+```{r message=FALSE, warning=FALSE}
+table(v$class, data.test$CLASS)
+```
+
+```{r}
+plot(v$x) # make a scatterplot
+text(v$x,m1$lev,cex=0.7,pos=4,col=c("red","blue")) # add labels
+```
+
+```{r message=FALSE, warning=FALSE}
+
+predi <- prediction(v$x,data.test$CLASS)
+perfldap=performance(predi,"tpr", "fpr")
+plot(perfldap,colorize = TRUE)
+
+```
+
+```{r message=FALSE, warning=FALSE}
+perf <- performance(predi, "auc")
+perf@y.values[[1]]
+```
+#### svm
+```{r}
+presvm = predict(modelsvm,data.test,type="prob")
+table(presvm,data.test$CLASS)
+
+```
+
+ 
+Superposition des courbes ROC pour ?valuer la performance des mod?les et les comparer 
+```{r message=FALSE, warning=FALSE}
+plot(perfrfp,col="red")
+par(new=TRUE)
+plot(perfldap,col="blue")
+par(new=TRUE)
+#plot(presvm,col="yellow")
+
+```
+
+#Linear regression
+
+```{r}
+data_assurance_apprentissage$CLASS<-as.numeric(data_assurance_apprentissage$CLASS)-1
+data_assurance_test$CLASS<-as.numeric(data_assurance_test$CLASS)-1
+ModelLinear <-lm(data_assurance_apprentissage$CLASS ~ .,data = data_assurance_apprentissage)
+#ModelLinear$coefficients
+plot(ModelLinear)
+hist(residuals(ModelLinear))
+predValidModelLinear <-predict(ModelLinear,data=data_assurance_test_sc)
+plot(predValidModelLinear)
+
+library(MASS)
+step<-stepAIC(ModelLinear,direction="both",trace = F)
+plot(step)
+hist(residuals(step))
+#summary(step)
+#step$coefficients
+predValidStep=predict(step,data_assurance_test)
+plot(predValidStep)
+```
+
+#Logistic regression
+
+```{r}
+  ModelLR <- glm(data_assurance_apprentissage$CLASS~.,data=data_assurance_apprentissage, family="binomial")
+  ModelLR
+  plot(ModelLR)
+  predValidModelLR=predict(ModelLR,data_assurance_test)
+  max(predValidModelLR)
+  plot(predValidModelLR)
+```
+
+###Deep Learning : Tensor Flow
+
+```{r message=FALSE, warning=FALSE}
+response <- function() "CLASS"
+data =dataAssurance
+features <- function() setdiff(names(data), response())
+set.seed(123)
+index = seq(1,max(which(data$STATUS=="Learning")))
+data$STATUS<-NULL
+datatrain = data[ index, ]
+datatest = data[ -index, ]
+data_train <- as.data.frame(datatrain)
+data_test  <- as.data.frame(datatest)
+feature_columns <- feature_columns(
+  column_numeric(features())
+)
+classifier <- dnn_classifier(
+  feature_columns = feature_columns,
+  hidden_units = c(30,20,10,5),
+  n_classes = 2
+)
+data_input_fn <- function(data) {
+  input_fn(data, features = features(), response = response())
+}
+t<-train(classifier, input_fn = data_input_fn(data_train))
+plot(t)
+predictions <- predict(classifier, input_fn = data_input_fn(data_test))
+evaluation <- evaluate(classifier, input_fn = data_input_fn(data_test))
+summary(evaluation)
+plot(evaluation)
+```
+
